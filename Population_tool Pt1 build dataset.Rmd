@@ -1,0 +1,316 @@
+---
+title: "Population_tool Pt1 build dataset"
+author: "P"
+date: "11 November 2018"
+output: html_document
+---
+# PURPOSE
+
+Create a dataset containing ward level data  
+* single year of age  
+* split by persons/males/females  
+* count of people in that age/sex group per ward  
+* count of people in that age/sex group per ward who live in the 10% most deprived areas  
+* count of people in that age/sex group per ward who live in the 20% most deprived areas  
+* count of people in that age/sex group per ward who live in the 30% most deprived areas  
+
+
+
+# METADATA  
+
+| Field | Desc |
+|-----------------------------------|----------------------------------|
+|Popn_estimate_source               | Refers to the ONS table which this data comes from. Included to provide an audit trail  |  
+| LAD18CD                           | ONS code for the Local Authority  |  
+| LAD18NM                           | ONS name for the Local Authority  |  
+| WD18CD                            | ONS code for the Ward  |  
+| WD18NM                            | ONS code for the Ward  |  
+| Year  |   |  
+| Age   |   |  
+| Sex   | 'Persons', 'Males', or 'Females'  |  
+| Count | The estimated number of people in that age/sex/ward group |  
+| Count_in_IMD2015_decile_1 | The estimated number of people in that age/sex/ward group who live in IMD decile 1, the 10% most deprived areas in England    |  
+| Count_in_IMD2015_decile_1_to_2 | The estimated number of people in that age/sex/ward group who live in IMD decile 1 or 2, the 20% most deprived areas in England    |  
+| Count_in_IMD2015_decile_1_to_3 | The estimated number of people in that age/sex/ward group who live in IMD decile 1,2 or 3, the 30% most deprived areas in England    |  
+
+
+
+# DATA SOURCES  
+
+**Desc:** ONS supplied Small area mid year popuykation estimates for 2017  
+**Source:** https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates  
+**Notes:** Download the unformatted version (SAPE20DT2), which is easier to read into R. I've never worked out why, but after unzipping the file I can't read the .xls into R. The workaround is to open the unzipped file in Excel, save it as .xls  
+
+**Desc:** ONS supplied lookup between LSOA and ward/Local Authority  
+**Source:** http://geoportal.statistics.gov.uk/datasets/interim-lower-layer-super-output-area-2011-to-ward-to-lad-may-2018-lookup-in-england-and-wales  
+**Direct link to csv:** https://opendata.arcgis.com/datasets/5f30206c6fe0402395681b84910d79e9_0.csv
+**Notes:** We can read this directly in, no need to download the file first  
+
+**Desc:** English indices of deprivation 2015  
+**Source:** https://www.gov.uk/government/statistics/english-indices-of-deprivation-2015  
+**Direct link to csv:** https://www.gov.uk/government/uploads/system/uploads/attachment_data/file/467774/File_7_ID_2015_All_ranks__deciles_and_scores_for_the_Indices_of_Deprivation__and_population_denominators.csv  
+**Notes:** We can read this directly in, no need to download the file first  
+
+
+
+# WORKFLOW  
+The base population data is at LSOA level, and is in wide format. We need to add geographical data for Ward and Local Authority, add deprivation data, convert it to long format, then aggregate to ward level.
+
+The excel workbook with the population figures contains three sheets, one each for Persons, Males, Females
+
+When converted from wide to long format each of the sheets produces nearly 3 million observations. Combining 3 of those data frames is slow to process. So, we'll write a function to read, combine and aggregate one sheet at a time, then run that function 3 times and combine the output. This means that we won't ever be working with more than 3 million observations.
+
+1. Construct a data frame with geographical lookup, and deprivation data   
+1. Write a function to process the desired population/geography/deprivation data for one sex    
+* read in the appropriate sheet of population data  
+* filter down to just English LSOA's  
+* join with the geographical lookup and deprivation data  
+* add fields for Sex, Year, and Source  
+* convert from wide format to long (still at LSOA level)  
+* calculate how many people at this age live in 10% most deprived, 20% most deprived, and 30% most deprived
+* aggregate to ward level  
+1. Run that function for Persons, Males, and Females, then join the result  
+
+
+
+# SCRIPT
+
+## Setup  
+
+### Load packages  
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(readxl)
+```
+
+
+### Define variables
+```{r}
+# This line assumes that the downloaded file is in the working directory
+ons_popn_est_file <- "SAPE20DT2-mid-2017-lsoa-syoa-estimates-unformatted.xlsx"
+
+
+# Define link to the geographical lookup data 
+ons_geo_lkp_file <- "https://opendata.arcgis.com/datasets/5f30206c6fe0402395681b84910d79e9_0.csv"
+
+
+# Define link to the deprivation data
+imd_file <- "https://www.gov.uk/government/uploads/system/uploads/attachment_data/file/467774/File_7_ID_2015_All_ranks__deciles_and_scores_for_the_Indices_of_Deprivation__and_population_denominators.csv"
+```
+
+
+## Construct a data frame with geography lookup and deprivation data
+
+### Read in and clean the geography lookup
+```{r}
+# Read in the data
+geo_lkp <- read.csv(ons_geo_lkp_file)
+
+
+# Drop the columns we don't need
+geo_lkp  <- geo_lkp %>% 
+    select(-FID, -WD18NMW)
+
+
+# For some reason the first column header comes in with odd characters, so we'll rename it
+colnames(geo_lkp)[1] <- "LSOA11CD"
+
+
+# Drop Welsh LSOA's, which all have codes starting W
+geo_lkp <- geo_lkp %>% 
+    filter(!grepl("W",LSOA11CD))
+```
+
+
+
+### Read in and clean the IMD 2015 data
+```{r}
+imd_data <- read.csv(imd_file)
+
+
+# Drop the columns we don't need. We're going to join this data to the population data frame, all we need from here is the LSOA code (to join on), and the main IMD decile, rank, and score
+imd_data <- imd_data %>% 
+    select(LSOA.code..2011.
+           ,Index.of.Multiple.Deprivation..IMD..Decile..where.1.is.most.deprived.10..of.LSOAs.
+           ,Index.of.Multiple.Deprivation..IMD..Rank..where.1.is.most.deprived.
+           ,Index.of.Multiple.Deprivation..IMD..Score)
+
+
+# Rename the columns to something more useable
+colnames(imd_data) <- c("LSOA11CD","IMD2015_decile","IMD2015_rank" ,"IMD2015_score")
+```
+
+
+### Combine geography lookup and deprivation data
+```{r}
+geo_and_dep <- geo_lkp %>% left_join(imd_data)
+```
+
+
+## Construct a data frame with the population estimate data
+
+### Create a function to read and process the data
+The population estimate data is spread across 3 sheets of an Excel workbook, one each for Persons/Males/Females. We'll create a function to read and clean the data, then run that function for each of those sheets.
+```{r}
+popn_fn <- function(sex, year){
+    
+    #sex <-  "Persons" # uncomment these lines to run the code as code (not in a function)
+    #year <- 2017 # uncomment these lines to run the code as code (not in a function)
+    
+    
+    # Define the names of the Excel sheets, and create a variable which depends on the specified sex
+    sheet_to_read <- case_when(
+        sex == "Persons"  ~ "Mid-2017 Persons"
+        ,sex == "Males"  ~ "Mid-2017 Males"
+        ,sex == "Females"  ~ "Mid-2017 Females"
+        ,TRUE ~ "ERROR"
+    )
+    
+    
+    # read in the population data for the specified sheet
+    popn <- read_xlsx(ons_popn_est_file
+                      ,sheet = sheet_to_read
+                      ,skip = 4)
+    
+    
+    # also read in the title of the table, which we'll insert as metadata
+    source <- read_xlsx(ons_popn_est_file
+                        ,sheet = sheet_to_read
+                        ,range = "A3"
+                        ,col_names = FALSE)
+    source <- as.character(source[1,1])
+    
+    
+    # process that population data
+    popn <- popn %>% 
+        
+        # Rename the first column to LSOA11CD, to create a common field to join with the geo/dep data
+        rename(LSOA11CD = `Area Codes`) %>% 
+        
+        
+        # Drop Welsh LSOA's, which all have codes starting W
+        filter(!grepl("W",LSOA11CD)) %>% 
+        
+        
+        # drop the area name, since that's also in the geo/dep data
+        # drop the 'all ages' column, since we want to do our own aggregations later on
+        select(-`Area Names`, -`All Ages`) %>% 
+        
+        
+        # rename the '90+' column to 90, so that the Age value will convert to numeric easily, making sorting  and conditional logic, easier
+        rename('90' = '90+') %>% 
+        
+        
+        # Add columns for Sex, Year, and source
+        mutate(Sex = sex
+               ,Popn_estimate_source = source
+               ,Year = year) %>% 
+        select(LSOA11CD
+               ,Popn_estimate_source
+               ,Year
+               ,Sex
+               ,everything())
+    
+    
+    # Combine geo/dep, with population
+    geo_dep_pop <- geo_and_dep %>% 
+        full_join(popn)
+    
+    
+    # Gather, from wide to long
+    geo_dep_pop_long <- geo_dep_pop %>% 
+        gather(key = Age, value = Count, '0':'90')
+    
+    
+    # Tidy the data
+    geo_dep_pop_long <- geo_dep_pop_long %>% 
+        mutate(LSOA11CD = as.factor(LSOA11CD))
+    
+    
+    ## Calculate deprivation figures (remember we're still working at LSOA level, so either everybody in an LSOA is in this bracket, or no-one is)
+    geo_dep_pop_long <- geo_dep_pop_long %>% 
+        mutate(Count_in_IMD2015_decile_1 = case_when(
+            IMD2015_decile == 1 ~ Count
+            ,TRUE ~0)
+            ,Count_in_IMD2015_decile_1_to_2 = case_when(
+                IMD2015_decile %in% c(1,2) ~ Count
+                ,TRUE ~0)
+            ,Count_in_IMD2015_decile_1_to_3 = case_when(
+                IMD2015_decile %in% c(1,2,3) ~ Count
+                ,TRUE ~0)
+        )
+    
+    
+    ## Aggregate to ward level
+    geo_dep_pop_long_ward <- geo_dep_pop_long %>% 
+        group_by(WD18CD
+                 ,WD18NM
+                 ,LAD18NM
+                 ,LAD18CD
+                 ,Popn_estimate_source
+                 ,Year
+                 ,Sex
+                 ,Age
+        ) %>% 
+        summarise(Count = sum(Count)
+                  ,Count_in_IMD2015_decile_1 = sum(Count_in_IMD2015_decile_1)
+                  ,Count_in_IMD2015_decile_1_to_2 = sum(Count_in_IMD2015_decile_1_to_2)
+                  ,Count_in_IMD2015_decile_1_to_3 = sum(Count_in_IMD2015_decile_1_to_3)
+        )
+    
+    
+    ## Re-arrange column order
+    geo_dep_pop_long_ward <- geo_dep_pop_long_ward %>% 
+        select(Popn_estimate_source
+               ,LAD18CD
+               ,LAD18NM
+               ,WD18CD
+               ,WD18NM
+               ,Year
+               ,Age
+               ,Sex
+               ,Count
+               ,Count_in_IMD2015_decile_1
+               ,Count_in_IMD2015_decile_1_to_2
+               ,Count_in_IMD2015_decile_1_to_3) %>% 
+        arrange(LAD18NM, WD18NM, Age)
+    
+    return(geo_dep_pop_long_ward)
+}
+```
+
+
+### Use function for Persons, Males, and Females, then combine
+```{r}
+popn_persons <- popn_fn("Persons","2017")
+popn_males <- popn_fn("Males","2017")
+popn_females <- popn_fn("Females","2017")
+
+popn_all <- popn_persons %>% 
+    full_join(popn_males) %>% 
+    full_join(popn_females)
+```
+
+
+## Tidy the data
+```{r}
+popn_all <- popn_all %>% 
+    ungroup() %>% 
+    mutate(Popn_estimate_source = as.factor(Popn_estimate_source)
+           ,Year = as.factor(Year)
+           ,Sex = as.factor(Sex)
+           ,Age = as.numeric(Age)) %>% 
+    select(Popn_estimate_source
+           ,LAD18CD
+           ,LAD18NM
+           ,WD18CD
+           ,WD18NM
+           ,Year
+           ,Age
+           ,Sex
+           ,Count
+           ,Count_in_IMD2015_decile_1
+           ,Count_in_IMD2015_decile_1_to_2
+           ,Count_in_IMD2015_decile_1_to_3)
+```
