@@ -1,13 +1,17 @@
 # Population_tool_v3
-Population_tool Pt1 build dataset.Rmd 
-This script creates a dataset containing ward level data  
+**Population_tool Pt1 build dataset.Rmd** 
+This script creates a dataset containing ward level population and deprivation data.
+
+**Population_tool Pt2 build shiny app**
+This script reads in the ward level population/deprivation data, and builds a shiny web app to present that data within an interactive tool.
+  
+# DATA CHARACTERISTICS
 * single year of age  
 * split by persons/males/females  
 * count of people in that age/sex group per ward  
 * count of people in that age/sex group per ward who live in the 10% most deprived areas  
 * count of people in that age/sex group per ward who live in the 20% most deprived areas  
 * count of people in that age/sex group per ward who live in the 30% most deprived areas  
-
 
 # METADATA  
 
@@ -27,7 +31,6 @@ This script creates a dataset containing ward level data
 | Count_in_IMD2015_decile_1_to_3 | The estimated number of people in that age/sex/ward group who live in IMD decile 1,2 or 3, the 30% most deprived areas in England    |  
 
 
-
 # DATA SOURCES  
 
 **Desc:** ONS supplied Small area mid year popuykation estimates for 2017  
@@ -44,22 +47,3 @@ This script creates a dataset containing ward level data
 **Direct link to csv:** https://www.gov.uk/government/uploads/system/uploads/attachment_data/file/467774/File_7_ID_2015_All_ranks__deciles_and_scores_for_the_Indices_of_Deprivation__and_population_denominators.csv  
 **Notes:** We can read this directly in, no need to download the file first  
 
-
-
-# WORKFLOW  
-The base population data is at LSOA level, and is in wide format. We need to add geographical data for Ward and Local Authority, add deprivation data, convert it to long format, then aggregate to ward level.
-
-The excel workbook with the population figures contains three sheets, one each for Persons, Males, Females
-
-When converted from wide to long format each of the sheets produces nearly 3 million observations. Combining 3 of those data frames is slow to process. So, we'll write a function to read, combine and aggregate one sheet at a time, then run that function 3 times and combine the output. This means that we won't ever be working with more than 3 million observations.
-
-1. Construct a data frame with geographical lookup, and deprivation data   
-1. Write a function to process the desired population/geography/deprivation data for one sex    
-* read in the appropriate sheet of population data  
-* filter down to just English LSOA's  
-* join with the geographical lookup and deprivation data  
-* add fields for Sex, Year, and Source  
-* convert from wide format to long (still at LSOA level)  
-* calculate how many people at this age live in 10% most deprived, 20% most deprived, and 30% most deprived
-* aggregate to ward level  
-1. Run that function for Persons, Males, and Females, then join the result  
