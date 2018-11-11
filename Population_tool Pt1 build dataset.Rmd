@@ -314,3 +314,7 @@ popn_all <- popn_all %>%
            ,Count_in_IMD2015_decile_1_to_2
            ,Count_in_IMD2015_decile_1_to_3)
 ```
+```{r}
+mye_2017_wards <- popn_all
+save(mye_2017_wards, file = "mye_2017_wards.RData")
+```

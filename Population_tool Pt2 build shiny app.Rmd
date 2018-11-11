@@ -1,0 +1,170 @@
+---
+title: "R Notebook v2"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+library(shiny)
+library(shinythemes)
+library(readr)
+library(stringr)
+library(dplyr)
+library(DT)
+library(tools)
+
+dataset_file_name <- "mye_2017_wards.RData"
+
+load(dataset_file_name)
+working_popn_set <- mye_2017_wards %>%
+    ungroup() %>% 
+    select(LAD18NM,WD18NM
+           , Sex, Age, Count
+           ,Count_in_IMD2015_decile_1
+           ,Count_in_IMD2015_decile_1_to_2
+           ,Count_in_IMD2015_decile_1_to_3
+           , Popn_estimate_source) %>% 
+    #filter(Sex == "Persons") %>% 
+    mutate(Country = "England"
+           ,UK = "United Kingdom")
+
+
+
+
+# Define UI
+ui <- fluidPage(
+    # App title
+    titlePanel("Population", windowTitle = "Population"),
+    
+    # Sidebar layout with a input and output definitions
+    sidebarLayout(
+        
+        # Inputs
+        sidebarPanel(
+            
+            # Select variable for Sex
+            selectInput(inputId = "selected_sex" 
+                        ,label = "Sex"
+                        ,choices = c("Persons"
+                                     ,"Males"
+                                     ,"Females")
+                        ,selected = "Persons"
+            ),
+            
+            # Select variable for geographical level to display values for
+            selectInput(inputId = "geo_group" 
+                        ,label = "Geography"
+                        ,choices = c("National" = "Country"
+                                     ,"Local authority" = "LAD18NM"
+                                     ,"Ward" = "WD18NM"
+                        )
+                        ,selected = "National"
+            ),
+            
+            
+            # Select variable to choose LA
+            selectInput(inputId = "selected_authority" 
+                        ,label = "Local Authority"
+                        ,choices = c("-- All Local Authorities --",c(levels(working_popn_set$LAD18NM))) 
+                        ,selected = "Southend-on-Sea"
+                        ,multiple = TRUE
+            ),
+            
+            # Select age
+            sliderInput(inputId = "age_group_1"
+                        ,label = "Age group 1"
+                        ,min = 0
+                        ,max = 90
+                        ,value = c(0,90)
+                        ,ticks = TRUE),
+            
+            h6("NOTE: 90 = 90+")
+            
+        ),
+        
+        
+        # Output:
+        mainPanel(
+            
+            tabsetPanel(type = "tabs",
+                        id = "tabsetpanel",
+                        tabPanel(title = "Data"
+                                 ,br()
+                                 ,textOutput("source_desc") 
+                                 ,br()
+                                 ,DT::dataTableOutput(outputId = "popntable"))
+            )
+        )
+    )
+)
+
+
+
+# Define server function required to create the scatterplot
+server <- function(input, output, session) {
+    
+    
+    # Create a subset of data filtering for selected geography
+    popn_selected <- reactive({
+        req(input$selected_authority)        
+        dont_filter_la <- case_when(
+            input$geo_group == "Country" ~ TRUE
+            ,input$selected_authority == "-- All Local Authorities --" ~ TRUE
+            ,TRUE ~ FALSE
+        )
+        
+        parent_area <- case_when(
+            input$geo_group == "Country" ~ "UK"
+            ,input$geo_group == "LAD18NM" ~ "Country"
+            ,input$geo_group == "WD18NM" ~ "LAD18NM"
+            ,TRUE ~"ERROR")
+        
+        popn_selected <- working_popn_set %>% 
+            
+            filter(Sex == input$selected_sex) %>%
+            filter(if(dont_filter_la == TRUE){
+                LAD18NM %in% levels(working_popn_set$LAD18NM)      
+            } else {
+                LAD18NM %in%  input$selected_authority
+            }) %>%
+            filter(between(Age, input$age_group_1[1],input$age_group_1[2])) %>% 
+            group_by_at(vars(input$geo_group,parent_area)) %>%
+            mutate(Popn_estimate_source = as.character(Popn_estimate_source)
+            ) %>% 
+            summarise(Count = sum(Count)
+                      ,number_dec_1_to_3 = sum(Count_in_IMD2015_decile_1_to_3)
+                      ,pct_dec_1_to_3=round(100*sum(Count_in_IMD2015_decile_1_to_3/sum(Count)),1)) %>%
+            #mutate(pct_dec_1_to_3 = paste(as.character(pct_dec_1_to_3),"%",sep="")) %>% 
+            rename("Area" = 1
+                   ,"Parent" = 2
+                   ,"Number in selected age group" = 3
+                   ,"Number of selected age group living in IMD deciles 1-3" = 4
+                   ,"% of the selected age group living in IMD deciles 1-3" = 5)
+    })            
+    
+    
+    
+    
+    
+    
+    # Print data table
+    output$popntable <- DT::renderDataTable(
+        DT::datatable(data = popn_selected()
+                      ,options = list(pageLength = 20)
+                      ,rownames = FALSE)
+    )
+    
+    # Create description of table
+    output$source_desc <- renderText({
+        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+    })
+    
+}
+
+
+
+# Create Shiny app object
+shinyApp(ui = ui, server = server)
+
+```
