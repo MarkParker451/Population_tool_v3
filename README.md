@@ -33,9 +33,9 @@ This script reads in the ward level population/deprivation data, and builds a sh
 
 # DATA SOURCES  
 
-**Desc:** ONS supplied Small area mid year popuykation estimates for 2017  
+**Desc:** ONS supplied Small area mid year population estimates for 2017  
 **Source:** https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates  
-**Notes:** Download the unformatted version (SAPE20DT2), which is easier to read into R. I've never worked out why, but after unzipping the file I can't read the .xls into R. The workaround is to open the unzipped file in Excel, save it as .xls  
+**Notes:** Download the unformatted version (SAPE20DT2), which is easier to read into R. I've never worked out why, but after unzipping the file I can't read the .xls into R. The workaround is to open the unzipped file in Excel, save it as .xlsx  
 
 **Desc:** ONS supplied lookup between LSOA and ward/Local Authority  
 **Source:** http://geoportal.statistics.gov.uk/datasets/interim-lower-layer-super-output-area-2011-to-ward-to-lad-may-2018-lookup-in-england-and-wales  
