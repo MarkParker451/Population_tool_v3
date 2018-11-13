@@ -21,7 +21,7 @@ This script reads in the ward level population/deprivation data, and builds a sh
 | LAD18CD                           | ONS code for the Local Authority  |  
 | LAD18NM                           | ONS name for the Local Authority  |  
 | WD18CD                            | ONS code for the Ward  |  
-| WD18NM                            | ONS code for the Ward  |  
+| WD18NM                            | ONS name for the Ward  |  
 | Year  |   |  
 | Age   |   |  
 | Sex   | 'Persons', 'Males', or 'Females'  |  
