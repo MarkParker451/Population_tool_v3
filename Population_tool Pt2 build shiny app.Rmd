@@ -72,15 +72,35 @@ ui <- fluidPage(
             ),
             
             # Select age
-            sliderInput(inputId = "age_group_1"
-                        ,label = "Age group 1"
-                        ,min = 0
-                        ,max = 90
-                        ,value = c(0,90)
-                        ,ticks = TRUE),
-            
-            h6("NOTE: 90 = 90+")
-            
+            wellPanel(
+                h3("Define age groups"),
+                h5("Use sliders to define different age groups"),
+                h6("Note: 90 = 90+"),
+                sliderInput(inputId = "age_group_1"
+                            ,label = "Age group 1"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(0,90)
+                            ,ticks = TRUE),
+                sliderInput(inputId = "age_group_2"
+                            ,label = "Age group 2"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(0,90)
+                            ,ticks = TRUE),
+                sliderInput(inputId = "age_group_3"
+                            ,label = "Age group 3"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(0,90)
+                            ,ticks = TRUE),
+                sliderInput(inputId = "age_group_4"
+                            ,label = "Age group 4"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(0,90)
+                            ,ticks = TRUE)
+            )
         ),
         
         
@@ -134,8 +154,7 @@ server <- function(input, output, session) {
             ) %>% 
             summarise(Count = sum(Count)
                       ,number_dec_1_to_3 = sum(Count_in_IMD2015_decile_1_to_3)
-                      ,pct_dec_1_to_3=round(100*sum(Count_in_IMD2015_decile_1_to_3/sum(Count)),1)) %>%
-            #mutate(pct_dec_1_to_3 = paste(as.character(pct_dec_1_to_3),"%",sep="")) %>% 
+                      ,pct_dec_1_to_3=sum(Count_in_IMD2015_decile_1_to_3/sum(Count))) %>%
             rename("Area" = 1
                    ,"Parent" = 2
                    ,"Number in selected age group" = 3
@@ -152,7 +171,9 @@ server <- function(input, output, session) {
     output$popntable <- DT::renderDataTable(
         DT::datatable(data = popn_selected()
                       ,options = list(pageLength = 20)
-                      ,rownames = FALSE)
+                      ,rownames = FALSE) %>% 
+            formatRound(3:4,mark = ",", digits = 0) %>% 
+            formatPercentage(5, digits = 1)
     )
     
     # Create description of table
