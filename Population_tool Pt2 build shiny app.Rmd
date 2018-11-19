@@ -5,7 +5,9 @@ editor_options:
   chunk_output_type: inline
 ---
 
-```{r}
+# Setup
+## Load packages
+```{r Setup}
 library(shiny)
 library(shinythemes)
 library(readr)
@@ -13,7 +15,14 @@ library(stringr)
 library(dplyr)
 library(DT)
 library(tools)
+library(tidyr)
+library(data.table)
+```
 
+
+## Load data
+Load the pre-prepared dataset which has been produced for this app.
+```{r Load data}
 dataset_file_name <- "mye_2017_wards.RData"
 
 load(dataset_file_name)
@@ -25,13 +34,15 @@ working_popn_set <- mye_2017_wards %>%
            ,Count_in_IMD2015_decile_1_to_2
            ,Count_in_IMD2015_decile_1_to_3
            , Popn_estimate_source) %>% 
-    #filter(Sex == "Persons") %>% 
+    # In order to group by 'Parent' area, to group to higher level geographies, we'll add columns specifying the country (England), and Englands Parent (UK) 
     mutate(Country = "England"
            ,UK = "United Kingdom")
 
+```
 
-
-
+# UI and Server
+## Build UI
+```{r UI}
 # Define UI
 ui <- fluidPage(
     # App title
@@ -72,91 +83,269 @@ ui <- fluidPage(
             ),
             
             # Select age
-            sliderInput(inputId = "age_group_1"
-                        ,label = "Age group 1"
-                        ,min = 0
-                        ,max = 90
-                        ,value = c(0,90)
-                        ,ticks = TRUE),
-            
-            h6("NOTE: 90 = 90+")
-            
+            wellPanel(
+                h3("Define age groups"),
+                h5("Use sliders to define different age groups"),
+                h6("Note: 90 = 90+"),
+                sliderInput(inputId = "age_group_1"
+                            ,label = "Age group 1"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(0,4)
+                            ,ticks = TRUE),
+                sliderInput(inputId = "age_group_2"
+                            ,label = "Age group 2"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(5,15)
+                            ,ticks = TRUE),
+                sliderInput(inputId = "age_group_3"
+                            ,label = "Age group 3"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(16,64)
+                            ,ticks = TRUE),
+                sliderInput(inputId = "age_group_4"
+                            ,label = "Age group 4"
+                            ,min = 0
+                            ,max = 90
+                            ,value = c(65,90)
+                            ,ticks = TRUE)
+            )
         ),
-        
         
         # Output:
         mainPanel(
             
             tabsetPanel(type = "tabs",
                         id = "tabsetpanel",
-                        tabPanel(title = "Data"
+                        
+                        tabPanel(title = "Population- Counts"
                                  ,br()
                                  ,textOutput("source_desc") 
                                  ,br()
-                                 ,DT::dataTableOutput(outputId = "popntable"))
+                                 ,DT::dataTableOutput(outputId = "popntable_count")),
+                        
+                        tabPanel(title = "Population - Percentages by group"
+                                 ,br()
+                                 ,textOutput("source_desc2") 
+                                 ,br()
+                                 ,DT::dataTableOutput(outputId = "popntable_pct")),
+                        
+                        tabPanel(title = "Deprivation - Counts"
+                                 ,br()
+                                 ,textOutput("source_desc3") 
+                                 ,br()
+                                 ,DT::dataTableOutput(outputId = "deptable_count")),
+                        
+                        tabPanel(title = "Deprivation - Percentages by group"
+                                 ,br()
+                                 ,textOutput("source_desc4") 
+                                 ,br()
+                                 ,DT::dataTableOutput(outputId = "deptable_pct"))
             )
         )
     )
 )
+```
 
 
+## Server
+Uncomment these test parameters to run the server part independently of the UI, which can sometimes be useful for testing
+```{r Test parameters}
+# input <- list()
+# input$geo_group <- "LAD18NM"
+# input$selected_authority <-  "Southend-on-Sea"
+# input$age_group_1 <- c(0,4)
+# input$age_group_2 <- c(5,15)
+# input$age_group_3 <- c(16,64)
+# input$age_group_4 <- c(65,90)
+# input$selected_sex <- "Persons"
+# input$dont_filter_la <-  TRUE
+```
 
-# Define server function required to create the scatterplot
+
+```{r Server}
+# Define server function required to create the tables
 server <- function(input, output, session) {
     
     
-    # Create a subset of data filtering for selected geography
+    # Create a subset of data filtering by the users selections
     popn_selected <- reactive({
         req(input$selected_authority)        
+
+                
+        # If the user selects anythning other than 'Country', or 'Local Authority' + 'All local authorities', then we'll want to filter the dataset to return just a single authority. Set this flag now, which will be used in the filter later 
         dont_filter_la <- case_when(
             input$geo_group == "Country" ~ TRUE
             ,input$selected_authority == "-- All Local Authorities --" ~ TRUE
             ,TRUE ~ FALSE
         )
-        
+ 
+               
+        # We want to display the 'Parent', so that we can for example show which LA a ward is in. This code defines what the Parent is. Later, we'll use this variable to select the appropriate column to include in the output
         parent_area <- case_when(
             input$geo_group == "Country" ~ "UK"
             ,input$geo_group == "LAD18NM" ~ "Country"
             ,input$geo_group == "WD18NM" ~ "LAD18NM"
             ,TRUE ~"ERROR")
         
+        
+        # I'm convinced there's a smarter way to do this, but I haven't found it yet. Later we need to calculate counts as a proportion of an areas total population. This code groups by whatever level of geography the user selects, and calculates the total population in that geography. We then join that total to the main working population dataset, giving us a 'Denoms' column, to use when working out proportions
+        denoms <- working_popn_set %>%
+            ungroup() %>% 
+            filter(Sex == "Persons") %>%
+            group_by_at(vars(input$geo_group,parent_area)) %>% 
+            summarise(Area_Denom = sum(Count))
+        
+        working_popn_set <- working_popn_set %>% 
+            left_join(denoms)
+        
+        
+        # We want the output to have columns with names that represent the age groups the user selects using the sliders, but at this stage we don't know what's going to be selected. So, create a text description of what's been selected for age group 1 through 4, which we'll later use in the column headings
+        ag1 <- paste("a. ",input$age_group_1[1]," to ",input$age_group_1[2])
+        ag2 <- paste("b. ",input$age_group_2[1]," to ",input$age_group_2[2])
+        ag3 <- paste("c. ",input$age_group_3[1]," to ",input$age_group_3[2])
+        ag4 <- paste("d. ",input$age_group_4[1]," to ",input$age_group_4[2])
+        
+        
+        
+        # Now that we've added the additional pieces we need, we can start building the reactive dataframe
         popn_selected <- working_popn_set %>% 
             
             filter(Sex == input$selected_sex) %>%
+            
+            # Filter down to a single LA, if that's appropriate for the users selections
             filter(if(dont_filter_la == TRUE){
                 LAD18NM %in% levels(working_popn_set$LAD18NM)      
             } else {
                 LAD18NM %in%  input$selected_authority
             }) %>%
-            filter(between(Age, input$age_group_1[1],input$age_group_1[2])) %>% 
-            group_by_at(vars(input$geo_group,parent_area)) %>%
+            
+            # Add a new column categorising every observation as one of the user defined age groups, based on the slider input
+            mutate(age_cat = case_when(
+                between(Age,input$age_group_1[1],input$age_group_1[2]) ~ ag1
+                ,between(Age,input$age_group_2[1],input$age_group_2[2]) ~ag2
+                ,between(Age,input$age_group_3[1],input$age_group_3[2]) ~ag3
+                ,between(Age,input$age_group_4[1],input$age_group_4[2]) ~ag4)
+                
+            )%>% 
+            
+            # Group by the user selected choices
+            group_by_at(vars(input$geo_group,parent_area,age_cat)) %>%
+            
+            # Add a column containing the source, which acts as metadata showing where the data comes from
             mutate(Popn_estimate_source = as.character(Popn_estimate_source)
             ) %>% 
-            summarise(Count = sum(Count)
+            
+            # Calculate the summary figures
+            summarise(Area_Total = unique(Area_Denom)
+                      ,Count = sum(Count)
+                      ,Percent_of_area_total = sum(Count)/unique(Area_Denom)
                       ,number_dec_1_to_3 = sum(Count_in_IMD2015_decile_1_to_3)
-                      ,pct_dec_1_to_3=round(100*sum(Count_in_IMD2015_decile_1_to_3/sum(Count)),1)) %>%
-            #mutate(pct_dec_1_to_3 = paste(as.character(pct_dec_1_to_3),"%",sep="")) %>% 
+                      ,pct_dec_1_to_3=sum(Count_in_IMD2015_decile_1_to_3/sum(Count))) %>%
+            
+            # Make the column names more user friendly
             rename("Area" = 1
                    ,"Parent" = 2
-                   ,"Number in selected age group" = 3
-                   ,"Number of selected age group living in IMD deciles 1-3" = 4
-                   ,"% of the selected age group living in IMD deciles 1-3" = 5)
+                   ,"Age cat" = 3
+                   ,"Total popn of area" = 4
+                   ,"Number in selected age group" = 5
+                   ,"% of area total in this group" = 6
+                   ,"Number of selected age group living in IMD deciles 1-3" = 7
+                   ,"% of the selected age group living in IMD deciles 1-3" = 8)
+        
+        
+        
     })            
-    
-    
-    
-    
-    
-    
-    # Print data table
-    output$popntable <- DT::renderDataTable(
-        DT::datatable(data = popn_selected()
+
+    # Create the output table to show population count
+    # Spread the table to convert from long to wide
+    # Note that we don't know how many columns there are going to be, that depends on the users age group choice, so we apply the formatting to columns 3:100, which effectively formats every column from 3 to the end
+    output$popntable_count <- DT::renderDataTable(
+        DT::datatable(data = popn_selected() %>% 
+                          select("Area"
+                                 ,"Parent"
+                                 ,"Age cat"
+                                 ,"Number in selected age group") %>% 
+                          spread('Age cat',"Number in selected age group")
                       ,options = list(pageLength = 20)
-                      ,rownames = FALSE)
+                      ,rownames = FALSE)  %>%
+            formatRound(3:100
+                        ,mark = ","
+                        , digits = 0)
     )
+    
+    # Create the output table to show percentage distribution between the age groups    
+    output$popntable_pct <- DT::renderDataTable(
+        DT::datatable(data = popn_selected() %>% 
+                          select("Area"
+                                 ,"Parent"
+                                 ,"Age cat"
+                                 ,"% of area total in this group")  %>% 
+                          spread('Age cat',"% of area total in this group")
+                      ,options = list(pageLength = 20)
+                      ,rownames = FALSE) %>% 
+            formatPercentage(3:100
+                             , digits = 1)
+    )
+    
+        # Create the output table to show counts of popn in the deprivation bracket
+    output$deptable_count <- DT::renderDataTable(
+        DT::datatable(data = popn_selected() %>% 
+                          select("Area"
+                                 ,"Parent"
+                                 ,"Age cat"
+                                 ,"Number of selected age group living in IMD deciles 1-3") %>% 
+                          spread('Age cat',"Number of selected age group living in IMD deciles 1-3")
+                      ,options = list(pageLength = 20)
+                      ,rownames = FALSE)  %>% 
+            formatRound(3:100
+                        ,mark = ","
+                        ,digits = 0)
+    )
+
+    
+            # Create the output table to show percentage of each age group in the deprivation bracket    
+    output$deptable_pct <- DT::renderDataTable(
+        DT::datatable(data = popn_selected() %>% 
+                          select("Area"
+                                 ,"Parent"
+                                 ,"Age cat"
+                                 ,"% of the selected age group living in IMD deciles 1-3") %>% 
+                          spread('Age cat',"% of the selected age group living in IMD deciles 1-3")
+                      ,options = list(pageLength = 20)
+                      ,rownames = FALSE)  %>% 
+            formatPercentage(3:100
+                             , digits = 1)
+    )
+    
+    # output$deptable_pct <- DT::renderDataTable(
+    #     DT::datatable(data = popn_selected()[c("Area"
+    #                                            ,"Parent"
+    #                                            ,"Age cat"
+    #                                            ,"% of the selected age group living in IMD deciles 1-3")] %>% 
+    #                       spread('Age cat',"% of the selected age group living in IMD deciles 1-3")
+    #                   ,options = list(pageLength = 20)
+    #                   ,rownames = FALSE)  %>% 
+    #         formatPercentage(3:100
+    #                          , digits = 1)
+    # )
     
     # Create description of table
     output$source_desc <- renderText({
+        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+    })
+    
+    output$source_desc2 <- renderText({
+        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+    })
+    
+    output$source_desc3 <- renderText({
+        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+    })
+    
+    output$source_desc3 <- renderText({
         paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
     })
     
