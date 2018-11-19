@@ -266,6 +266,7 @@ server <- function(input, output, session) {
         DT::datatable(data = popn_selected() %>% 
                           select("Area"
                                  ,"Parent"
+                                 ,"Total popn of area"
                                  ,"Age cat"
                                  ,"Number in selected age group") %>% 
                           spread('Age cat',"Number in selected age group")
@@ -295,6 +296,7 @@ server <- function(input, output, session) {
         DT::datatable(data = popn_selected() %>% 
                           select("Area"
                                  ,"Parent"
+                                 ,"Total popn of area"
                                  ,"Age cat"
                                  ,"Number of selected age group living in IMD deciles 1-3") %>% 
                           spread('Age cat',"Number of selected age group living in IMD deciles 1-3")
