@@ -122,24 +122,28 @@ ui <- fluidPage(
                         
                         tabPanel(title = "Population- Counts"
                                  ,br()
+                                 ,h2("Count of estimated population")
                                  ,textOutput("source_desc") 
                                  ,br()
                                  ,DT::dataTableOutput(outputId = "popntable_count")),
                         
                         tabPanel(title = "Population - Percentages by group"
                                  ,br()
+                                 ,h2("Percentage of estimated population in each age group")
                                  ,textOutput("source_desc2") 
                                  ,br()
                                  ,DT::dataTableOutput(outputId = "popntable_pct")),
                         
                         tabPanel(title = "Deprivation - Counts"
                                  ,br()
+                                 ,h2("Count of population in each age group living in the 30% most deprived areas")
                                  ,textOutput("source_desc3") 
                                  ,br()
                                  ,DT::dataTableOutput(outputId = "deptable_count")),
                         
                         tabPanel(title = "Deprivation - Percentages by group"
                                  ,br()
+                                 ,h2("Percentage of each age group living in the 30% most deprived areas")
                                  ,textOutput("source_desc4") 
                                  ,br()
                                  ,DT::dataTableOutput(outputId = "deptable_pct"))
