@@ -177,16 +177,16 @@ server <- function(input, output, session) {
     # Create a subset of data filtering by the users selections
     popn_selected <- reactive({
         req(input$selected_authority)        
-
-                
+        
+        
         # If the user selects anythning other than 'Country', or 'Local Authority' + 'All local authorities', then we'll want to filter the dataset to return just a single authority. Set this flag now, which will be used in the filter later 
         dont_filter_la <- case_when(
             input$geo_group == "Country" ~ TRUE
             ,input$selected_authority == "-- All Local Authorities --" ~ TRUE
             ,TRUE ~ FALSE
         )
- 
-               
+        
+        
         # We want to display the 'Parent', so that we can for example show which LA a ward is in. This code defines what the Parent is. Later, we'll use this variable to select the appropriate column to include in the output
         parent_area <- case_when(
             input$geo_group == "Country" ~ "UK"
@@ -206,11 +206,49 @@ server <- function(input, output, session) {
             left_join(denoms)
         
         
+        # We're going to do some conditional logic, maths, and lable creation using the age values selected by the user. Start by creating some short aliases to make them easier to work with, ag1L = lower bound of age group 1, ag1U = upper bound
+        ag1L <- input$age_group_1[1]
+        ag1U <- input$age_group_1[2]
+        ag2L <- input$age_group_2[1]
+        ag2U <- input$age_group_2[2]
+        ag3L <- input$age_group_3[1]
+        ag3U <- input$age_group_3[2]
+        ag4L <- input$age_group_4[1]
+        ag4U <- input$age_group_4[2]
+        
+        if(ag2L <= ag1U){
+            ag2L = ag1U +1
+        }
+        
+        if(ag3L <= ag1U){
+            ag3L = ag1U +1
+        }
+        if(ag3L <= ag2U){
+            ag3L = ag2U +1
+        }
+        
+        
+        if(ag4L <= ag1U){
+            ag4L = ag1U +1
+        }
+        if(ag4L <= ag2U){
+            ag4L = ag2U +1
+        }
+        if(ag4L <= ag3U){
+            ag4L = ag3U +1
+        }
+        
         # We want the output to have columns with names that represent the age groups the user selects using the sliders, but at this stage we don't know what's going to be selected. So, create a text description of what's been selected for age group 1 through 4, which we'll later use in the column headings
-        ag1 <- paste("a. ",input$age_group_1[1]," to ",input$age_group_1[2])
-        ag2 <- paste("b. ",input$age_group_2[1]," to ",input$age_group_2[2])
-        ag3 <- paste("c. ",input$age_group_3[1]," to ",input$age_group_3[2])
-        ag4 <- paste("d. ",input$age_group_4[1]," to ",input$age_group_4[2])
+        # ag1 <- paste("a. ",input$age_group_1[1]," to ",input$age_group_1[2])
+        # ag2 <- paste("b. ",input$age_group_2[1]," to ",input$age_group_2[2])
+        # ag3 <- paste("c. ",input$age_group_3[1]," to ",input$age_group_3[2])
+        # ag4 <- paste("d. ",input$age_group_4[1]," to ",input$age_group_4[2])
+        
+        ag1_label <- paste("a. ",ag1L," to ",ag1U)
+        ag2_label <- paste("b. ",ag2L," to ",ag2U)
+        ag3_label <- paste("c. ",ag3L," to ",ag3U)
+        ag4_label <- paste("d. ",ag4L," to ",ag4U)
+        
         
         
         
@@ -227,12 +265,19 @@ server <- function(input, output, session) {
             }) %>%
             
             # Add a new column categorising every observation as one of the user defined age groups, based on the slider input
+            # mutate(age_cat = case_when(
+            #     between(Age,input$age_group_1[1],input$age_group_1[2]) ~ ag1
+            #     ,between(Age,input$age_group_2[1],input$age_group_2[2]) ~ag2
+            #     ,between(Age,input$age_group_3[1],input$age_group_3[2]) ~ag3
+            #     ,between(Age,input$age_group_4[1],input$age_group_4[2]) ~ag4)  
+            # )%>% 
+            
+            
             mutate(age_cat = case_when(
-                between(Age,input$age_group_1[1],input$age_group_1[2]) ~ ag1
-                ,between(Age,input$age_group_2[1],input$age_group_2[2]) ~ag2
-                ,between(Age,input$age_group_3[1],input$age_group_3[2]) ~ag3
-                ,between(Age,input$age_group_4[1],input$age_group_4[2]) ~ag4)
-                
+                between(Age,ag1L,ag1U) ~ ag1_label                
+                ,between(Age,ag2L,ag2U) ~ ag2_label
+                ,between(Age,ag3L,ag3U) ~ ag3_label
+                ,between(Age,ag4L,ag4U) ~ ag4_label)
             )%>% 
             
             # Group by the user selected choices
@@ -262,7 +307,7 @@ server <- function(input, output, session) {
         
         
     })            
-
+    
     # Create the output table to show population count
     # Spread the table to convert from long to wide
     # Note that we don't know how many columns there are going to be, that depends on the users age group choice, so we apply the formatting to columns 3:100, which effectively formats every column from 3 to the end
@@ -295,7 +340,7 @@ server <- function(input, output, session) {
                              , digits = 1)
     )
     
-        # Create the output table to show counts of popn in the deprivation bracket
+    # Create the output table to show counts of popn in the deprivation bracket
     output$deptable_count <- DT::renderDataTable(
         DT::datatable(data = popn_selected() %>% 
                           select("Area"
@@ -310,9 +355,9 @@ server <- function(input, output, session) {
                         ,mark = ","
                         ,digits = 0)
     )
-
     
-            # Create the output table to show percentage of each age group in the deprivation bracket    
+    
+    # Create the output table to show percentage of each age group in the deprivation bracket    
     output$deptable_pct <- DT::renderDataTable(
         DT::datatable(data = popn_selected() %>% 
                           select("Area"
