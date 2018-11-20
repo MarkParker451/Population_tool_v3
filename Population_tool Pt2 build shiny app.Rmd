@@ -216,10 +216,13 @@ server <- function(input, output, session) {
         ag4L <- input$age_group_4[1]
         ag4U <- input$age_group_4[2]
         
+        
+        # If the user has created overlapping ranges, so the lower bound of age group 2 is >= the upper bound of age group 1, then we'll change age group 2 to start at age group 1 upper bound +1
         if(ag2L <= ag1U){
             ag2L = ag1U +1
         }
         
+        # same principle for age group 3, but this time we need to make sure it's greater than the upper bounds of both age group 1 and 2
         if(ag3L <= ag1U){
             ag3L = ag1U +1
         }
@@ -227,7 +230,7 @@ server <- function(input, output, session) {
             ag3L = ag2U +1
         }
         
-        
+        # and the lower bound of age group 4 must be greater than the upper bounds of age groups 1, 2 and 3        
         if(ag4L <= ag1U){
             ag4L = ag1U +1
         }
@@ -239,11 +242,6 @@ server <- function(input, output, session) {
         }
         
         # We want the output to have columns with names that represent the age groups the user selects using the sliders, but at this stage we don't know what's going to be selected. So, create a text description of what's been selected for age group 1 through 4, which we'll later use in the column headings
-        # ag1 <- paste("a. ",input$age_group_1[1]," to ",input$age_group_1[2])
-        # ag2 <- paste("b. ",input$age_group_2[1]," to ",input$age_group_2[2])
-        # ag3 <- paste("c. ",input$age_group_3[1]," to ",input$age_group_3[2])
-        # ag4 <- paste("d. ",input$age_group_4[1]," to ",input$age_group_4[2])
-        
         ag1_label <- paste("a. ",ag1L," to ",ag1U)
         ag2_label <- paste("b. ",ag2L," to ",ag2U)
         ag3_label <- paste("c. ",ag3L," to ",ag3U)
@@ -263,16 +261,9 @@ server <- function(input, output, session) {
             } else {
                 LAD18NM %in%  input$selected_authority
             }) %>%
+
             
             # Add a new column categorising every observation as one of the user defined age groups, based on the slider input
-            # mutate(age_cat = case_when(
-            #     between(Age,input$age_group_1[1],input$age_group_1[2]) ~ ag1
-            #     ,between(Age,input$age_group_2[1],input$age_group_2[2]) ~ag2
-            #     ,between(Age,input$age_group_3[1],input$age_group_3[2]) ~ag3
-            #     ,between(Age,input$age_group_4[1],input$age_group_4[2]) ~ag4)  
-            # )%>% 
-            
-            
             mutate(age_cat = case_when(
                 between(Age,ag1L,ag1U) ~ ag1_label                
                 ,between(Age,ag2L,ag2U) ~ ag2_label
