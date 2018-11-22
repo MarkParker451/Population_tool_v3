@@ -54,32 +54,49 @@ ui <- fluidPage(
         # Inputs
         sidebarPanel(
             
-            # Select variable for Sex
-            selectInput(inputId = "selected_sex" 
-                        ,label = "Sex"
-                        ,choices = c("Persons"
-                                     ,"Males"
-                                     ,"Females")
-                        ,selected = "Persons"
+            wellPanel(
+                # Select variable for Sex
+                selectInput(inputId = "selected_sex" 
+                            ,label = "Sex"
+                            ,choices = c("Persons"
+                                         ,"Males"
+                                         ,"Females")
+                            ,selected = "Persons"
+                ),
+                
+                # Select variable for geographical level to display values for
+                selectInput(inputId = "geo_group" 
+                            ,label = "Geography"
+                            ,choices = c("National" = "Country"
+                                         ,"Local authority" = "LAD18NM"
+                                         ,"Ward" = "WD18NM"
+                            )
+                            #,selected = "National"
+                ),
+                
+                
+                # Select variable to choose LA
+                selectInput(inputId = "selected_authority" 
+                            ,label = "Local Authority"
+                            ,choices = c("-- All Local Authorities --",c(levels(working_popn_set$LAD18NM))) 
+                            ,selected = "Southend-on-Sea"
+                            ,multiple = TRUE
+                            
+                )
             ),
             
-            # Select variable for geographical level to display values for
-            selectInput(inputId = "geo_group" 
-                        ,label = "Geography"
-                        ,choices = c("National" = "Country"
-                                     ,"Local authority" = "LAD18NM"
-                                     ,"Ward" = "WD18NM"
-                        )
-                        ,selected = "National"
-            ),
             
-            
-            # Select variable to choose LA
-            selectInput(inputId = "selected_authority" 
-                        ,label = "Local Authority"
-                        ,choices = c("-- All Local Authorities --",c(levels(working_popn_set$LAD18NM))) 
-                        ,selected = "Southend-on-Sea"
-                        ,multiple = TRUE
+            # Select definition of deprivation to use
+            wellPanel(
+                radioButtons(inputId = "selected_deprivation"
+                             ,label = "Choose level of deprivation (from IMD 2015)"
+                             ,choices = c("10% most deprived (IMD decile 1)" = "dep_dec_1"
+                                          ,"20% most deprived (IMD deciles 1,2)" = "dep_dec_2"
+                                          ,"30% most deprived (IMD decile 1,2,3)" = "dep_dec_3"
+                             )
+                             #,selected = "30% most deprived (IMD decile 1,2,3)"
+                             ,selected = "dep_dec_1"
+                )
             ),
             
             # Select age
@@ -123,7 +140,7 @@ ui <- fluidPage(
                         tabPanel(title = "Population- Counts"
                                  ,br()
                                  ,h2("Count of estimated population")
-                                 ,textOutput("source_desc") 
+                                 ,textOutput("source_desc1") 
                                  ,br()
                                  ,DT::dataTableOutput(outputId = "popntable_count")),
                         
@@ -136,15 +153,17 @@ ui <- fluidPage(
                         
                         tabPanel(title = "Deprivation - Counts"
                                  ,br()
-                                 ,h2("Count of population in each age group living in the 30% most deprived areas")
+                                 ,h2("Count of population in each age group living in deprived areas")
                                  ,textOutput("source_desc3") 
+                                 ,textOutput("dep_desc1")
                                  ,br()
                                  ,DT::dataTableOutput(outputId = "deptable_count")),
                         
                         tabPanel(title = "Deprivation - Percentages by group"
                                  ,br()
-                                 ,h2("Percentage of each age group living in the 30% most deprived areas")
+                                 ,h2("Percentage of each age group living in deprived areas")
                                  ,textOutput("source_desc4") 
+                                 ,textOutput("dep_desc2")
                                  ,br()
                                  ,DT::dataTableOutput(outputId = "deptable_pct"))
             )
@@ -261,7 +280,7 @@ server <- function(input, output, session) {
             } else {
                 LAD18NM %in%  input$selected_authority
             }) %>%
-
+            
             
             # Add a new column categorising every observation as one of the user defined age groups, based on the slider input
             mutate(age_cat = case_when(
@@ -270,6 +289,8 @@ server <- function(input, output, session) {
                 ,between(Age,ag3L,ag3U) ~ ag3_label
                 ,between(Age,ag4L,ag4U) ~ ag4_label)
             )%>% 
+            
+            
             
             # Group by the user selected choices
             group_by_at(vars(input$geo_group,parent_area,age_cat)) %>%
@@ -282,8 +303,20 @@ server <- function(input, output, session) {
             summarise(Area_Total = unique(Area_Denom)
                       ,Count = sum(Count)
                       ,Percent_of_area_total = sum(Count)/unique(Area_Denom)
-                      ,number_dec_1_to_3 = sum(Count_in_IMD2015_decile_1_to_3)
-                      ,pct_dec_1_to_3=sum(Count_in_IMD2015_decile_1_to_3/sum(Count))) %>%
+                      #,number_dec_1_to_3 = sum(Count_in_IMD2015_decile_1_to_3)
+                      #,pct_dec_1_to_3=sum(Count_in_IMD2015_decile_1_to_3/sum(Count))
+                      ,number_deprived = case_when(
+                          input$selected_deprivation == "dep_dec_1" ~ sum(Count_in_IMD2015_decile_1)
+                          ,input$selected_deprivation == "dep_dec_2" ~ sum(Count_in_IMD2015_decile_1_to_2)
+                          ,input$selected_deprivation == "dep_dec_3" ~ sum(Count_in_IMD2015_decile_1_to_3)
+                          ,TRUE ~ sum(Count_in_IMD2015_decile_1))
+                      ,pct_deprived = case_when(
+                          input$selected_deprivation == "dep_dec_1" ~ sum(Count_in_IMD2015_decile_1)/sum(Count)
+                          ,input$selected_deprivation == "dep_dec_2" ~ sum(Count_in_IMD2015_decile_1_to_2)/sum(Count)
+                          ,input$selected_deprivation == "dep_dec_3" ~ sum(Count_in_IMD2015_decile_1_to_3)/sum(Count)
+                          ,TRUE ~ sum(Count_in_IMD2015_decile_1)/sum(Count)
+                      )
+            ) %>%
             
             # Make the column names more user friendly
             rename("Area" = 1
@@ -292,8 +325,8 @@ server <- function(input, output, session) {
                    ,"Total popn of area" = 4
                    ,"Number in selected age group" = 5
                    ,"% of area total in this group" = 6
-                   ,"Number of selected age group living in IMD deciles 1-3" = 7
-                   ,"% of the selected age group living in IMD deciles 1-3" = 8)
+                   ,"Number of selected age group living in deprivation" = 7
+                   ,"% of the selected age group living in deprivation" = 8)
         
         
         
@@ -338,8 +371,8 @@ server <- function(input, output, session) {
                                  ,"Parent"
                                  ,"Total popn of area"
                                  ,"Age cat"
-                                 ,"Number of selected age group living in IMD deciles 1-3") %>% 
-                          spread('Age cat',"Number of selected age group living in IMD deciles 1-3")
+                                 ,"Number of selected age group living in deprivation") %>% 
+                          spread('Age cat',"Number of selected age group living in deprivation")
                       ,options = list(pageLength = 20)
                       ,rownames = FALSE)  %>% 
             formatRound(3:100
@@ -354,41 +387,60 @@ server <- function(input, output, session) {
                           select("Area"
                                  ,"Parent"
                                  ,"Age cat"
-                                 ,"% of the selected age group living in IMD deciles 1-3") %>% 
-                          spread('Age cat',"% of the selected age group living in IMD deciles 1-3")
+                                 ,"% of the selected age group living in deprivation") %>% 
+                          spread('Age cat',"% of the selected age group living in deprivation")
                       ,options = list(pageLength = 20)
                       ,rownames = FALSE)  %>% 
             formatPercentage(3:100
                              , digits = 1)
     )
     
-    # output$deptable_pct <- DT::renderDataTable(
-    #     DT::datatable(data = popn_selected()[c("Area"
-    #                                            ,"Parent"
-    #                                            ,"Age cat"
-    #                                            ,"% of the selected age group living in IMD deciles 1-3")] %>% 
-    #                       spread('Age cat',"% of the selected age group living in IMD deciles 1-3")
-    #                   ,options = list(pageLength = 20)
-    #                   ,rownames = FALSE)  %>% 
-    #         formatPercentage(3:100
-    #                          , digits = 1)
-    # )
     
-    # Create description of table
-    output$source_desc <- renderText({
-        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+    output$source_desc1 <- renderText({
+        paste(case_when(
+            input$geo_group == "Country" ~ "Country"
+            ,input$geo_group == "LAD18NM" ~ "Local authority"
+            ,input$geo_group == "WD18NM" ~ "Ward")
+            ," level population figures from 2017 mid year population estimate.")
     })
     
     output$source_desc2 <- renderText({
-        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+        paste(case_when(
+            input$geo_group == "Country" ~ "Country"
+            ,input$geo_group == "LAD18NM" ~ "Local authority"
+            ,input$geo_group == "WD18NM" ~ "Ward")
+            ," level population figures from 2017 mid year population estimate.")
     })
     
     output$source_desc3 <- renderText({
-        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+        paste(case_when(
+            input$geo_group == "Country" ~ "Country"
+            ,input$geo_group == "LAD18NM" ~ "Local authority"
+            ,input$geo_group == "WD18NM" ~ "Ward")
+            ," level population figures from 2017 mid year population estimate")
     })
     
-    output$source_desc3 <- renderText({
-        paste(input$geo_group, " level population and deprivation. Population figures from 2017 mid year population estimate. Deprivation figures from English Indices of Deprivation 2015")
+    output$source_desc4 <- renderText({
+        paste(case_when(
+            input$geo_group == "Country" ~ "Country"
+            ,input$geo_group == "LAD18NM" ~ "Local authority"
+            ,input$geo_group == "WD18NM" ~ "Ward")
+            ," level population figures from 2017 mid year population estimate")
+    })
+    
+    
+    output$dep_desc1 <- renderText({
+        paste("Showing deprivation as: ", case_when(
+            input$selected_deprivation == "dep_dec_1" ~ "10% most deprived (IMD decile 1), from 2015 English Indices of Deprivation"
+            ,input$selected_deprivation == "dep_dec_2" ~ "20% most deprived (IMD decile 1 or 2), from 2015 English Indices of Deprivation"
+            ,input$selected_deprivation == "dep_dec_3" ~ "30% most deprived (IMD decile 1, 2 or 3), from 2015 English Indices of Deprivation"))
+    })
+    
+    output$dep_desc2 <- renderText({
+        paste("Showing deprivation as: ", case_when(
+            input$selected_deprivation == "dep_dec_1" ~ "10% most deprived (IMD decile 1), from 2015 English Indices of Deprivation"
+            ,input$selected_deprivation == "dep_dec_2" ~ "20% most deprived (IMD decile 1 or 2), from 2015 English Indices of Deprivation"
+            ,input$selected_deprivation == "dep_dec_3" ~ "30% most deprived (IMD decile 1, 2 or 3), from 2015 English Indices of Deprivation"))
     })
     
 }
