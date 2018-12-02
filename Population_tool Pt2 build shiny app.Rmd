@@ -108,25 +108,25 @@ ui <- fluidPage(
                             ,label = "Age group 1"
                             ,min = 0
                             ,max = 90
-                            ,value = c(0,4)
+                            ,value = c(0,17)
                             ,ticks = TRUE),
                 sliderInput(inputId = "age_group_2"
                             ,label = "Age group 2"
                             ,min = 0
                             ,max = 90
-                            ,value = c(5,15)
+                            ,value = c(18,90)
                             ,ticks = TRUE),
                 sliderInput(inputId = "age_group_3"
                             ,label = "Age group 3"
                             ,min = 0
                             ,max = 90
-                            ,value = c(16,64)
+                            ,value = c(90,90)
                             ,ticks = TRUE),
                 sliderInput(inputId = "age_group_4"
                             ,label = "Age group 4"
                             ,min = 0
                             ,max = 90
-                            ,value = c(65,90)
+                            ,value = c(90,90)
                             ,ticks = TRUE)
             )
         ),
@@ -192,6 +192,21 @@ Uncomment these test parameters to run the server part independently of the UI, 
 # Define server function required to create the tables
 server <- function(input, output, session) {
     
+    observeEvent(input$age_group_1,{
+        updateSliderInput(session,"age_group_2"
+                          ,value = c(input$age_group_1[2]+1, 90))
+    })
+    
+    observeEvent(input$age_group_2,{
+        updateSliderInput(session,"age_group_3"
+                          ,value = c(input$age_group_2[2]+1, 90))
+    })
+    
+    observeEvent(input$age_group_3,{
+        updateSliderInput(session,"age_group_4"
+                          ,value = c(input$age_group_3[2]+1, 90))
+    })
+    
     
     # Create a subset of data filtering by the users selections
     popn_selected <- reactive({
@@ -217,7 +232,7 @@ server <- function(input, output, session) {
         # I'm convinced there's a smarter way to do this, but I haven't found it yet. Later we need to calculate counts as a proportion of an areas total population. This code groups by whatever level of geography the user selects, and calculates the total population in that geography. We then join that total to the main working population dataset, giving us a 'Denoms' column, to use when working out proportions
         denoms <- working_popn_set %>%
             ungroup() %>% 
-            filter(Sex == "Persons") %>%
+            filter(Sex == input$selected_sex) %>%
             group_by_at(vars(input$geo_group,parent_area)) %>% 
             summarise(Area_Denom = sum(Count))
         
@@ -234,31 +249,6 @@ server <- function(input, output, session) {
         ag3U <- input$age_group_3[2]
         ag4L <- input$age_group_4[1]
         ag4U <- input$age_group_4[2]
-        
-        
-        # If the user has created overlapping ranges, so the lower bound of age group 2 is >= the upper bound of age group 1, then we'll change age group 2 to start at age group 1 upper bound +1
-        if(ag2L <= ag1U){
-            ag2L = ag1U +1
-        }
-        
-        # same principle for age group 3, but this time we need to make sure it's greater than the upper bounds of both age group 1 and 2
-        if(ag3L <= ag1U){
-            ag3L = ag1U +1
-        }
-        if(ag3L <= ag2U){
-            ag3L = ag2U +1
-        }
-        
-        # and the lower bound of age group 4 must be greater than the upper bounds of age groups 1, 2 and 3        
-        if(ag4L <= ag1U){
-            ag4L = ag1U +1
-        }
-        if(ag4L <= ag2U){
-            ag4L = ag2U +1
-        }
-        if(ag4L <= ag3U){
-            ag4L = ag3U +1
-        }
         
         # We want the output to have columns with names that represent the age groups the user selects using the sliders, but at this stage we don't know what's going to be selected. So, create a text description of what's been selected for age group 1 through 4, which we'll later use in the column headings
         ag1_label <- paste("a. ",ag1L," to ",ag1U)
