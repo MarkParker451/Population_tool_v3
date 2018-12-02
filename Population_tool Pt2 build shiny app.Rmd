@@ -153,7 +153,7 @@ ui <- fluidPage(
                         
                         tabPanel(title = "Deprivation - Counts"
                                  ,br()
-                                 ,h2("Count of population in each age group living in the 30% most deprived areas")
+                                 ,h2("Count of population in each age group living in deprived areas")
                                  ,textOutput("source_desc3")
                                  ,textOutput("dep_desc1")
                                  ,br()
@@ -161,7 +161,7 @@ ui <- fluidPage(
                         
                         tabPanel(title = "Deprivation - Percentages by group"
                                  ,br()
-                                 ,h2("Percentage of each age group living in the 30% most deprived areas")
+                                 ,h2("Percentage of each age group living in deprived areas")
                                  ,textOutput("source_desc4")
                                  ,textOutput("dep_desc2") 
                                  ,br()
